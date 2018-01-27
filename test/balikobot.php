@@ -1,9 +1,9 @@
 <?php
 
-include_once '../src/Balikobot/Balikobot.php';
-include_once 'config.php';
+require_once __DIR__ . '/../src/Balikobot/Balikobot.php';
+require_once __DIR__ . '/config.php';
 
-use Merinsky\Balikobot\Balikobot;
+use Balikobot\Balikobot;
 
 // tests
 $testGetters = false;

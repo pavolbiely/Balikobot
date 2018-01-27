@@ -6,7 +6,7 @@ It offers implementation of Balikobot API described in the [documentation, ver.1
 Installation
 ------------
 ```console
-composer require merinsky/balikobot
+composer require pavolbiely/balikobot
 ```
 
 Usage
@@ -15,7 +15,7 @@ To **order shipment** you should done these steps:
 1. add packages to the front
 2. order packages collection (for each shipper)
 ```php
-use Merinsky\Balikobot\Balikobot;
+use Balikobot\Balikobot;
 
 define('API_USER', '...');
 define('API_KEY', '...');

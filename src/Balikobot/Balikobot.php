@@ -1,13 +1,13 @@
 <?php
 
-namespace Merinsky\Balikobot;
+namespace Balikobot;
 
 /**
  * @author Miroslav Merinsky <miroslav@merinsky.biz>
  * @version 1.0
  */
-class Balikobot {
-
+class Balikobot
+{
     /**
      * Requests
      */
@@ -437,19 +437,19 @@ class Balikobot {
 
 
     /** @var string */
-    private $apiUser = null;
+	protected $apiUser;
 
     /** @var string */
-    private $apiKey = null;
+	protected $apiKey;
 
-    /** @var int */
-    private $shopId = null;
+	/** @var string */
+	protected $apiUrl = 'https://api.balikobot.cz';
 
-    /** @var string */
-    private $apiUrl = 'https://api.balikobot.cz';
+	/** @var int */
+	protected $shopId;
 
-    /** @var array */
-    private $data = [
+	/** @var array */
+    protected $data = [
         'isService' => false,
         'isCustomer' => false,
         'isCashOnDelivery' => false,
@@ -457,12 +457,15 @@ class Balikobot {
         'data' => [],
     ];
 
+
+
     /**
-     * @param string $apiUser
-     * @param string $apiKey
-     * @param int $shopId Own identification of the shop; will be used to identify packages if you use one account for several shops
+     * @param string
+     * @param string
+     * @param int Own identification of the shop; will be used to identify packages if you use one account for several shops
      */
-    public function __construct($apiUser, $apiKey, $shopId) {
+    public function __construct($apiUser, $apiKey, $shopId)
+	{
         if (empty($apiUser) || empty($apiKey) || empty($shopId))
             throw new \InvalidArgumentException('Invalid argument has been entered.');
         if (!is_int($shopId))
@@ -473,15 +476,17 @@ class Balikobot {
         $this->apiKey = $apiKey;
     }
 
+
+
     /**
      * Sets service
-     *
-     * @param string $shipper
-     * @param string|int $service
-     * @param array $options
-     * @return $this
+     * @param string
+     * @param string|int
+     * @param array
+     * @return self
      */
-    public function service($shipper, $service, array $options = []) {
+    public function service($shipper, $service, array $options = [])
+	{
         if (empty($shipper) || empty($service))
             throw new \InvalidArgumentException('Invalid argument has been entered.');
         if (!in_array($shipper, $this->getShippers()))
@@ -603,110 +608,34 @@ class Balikobot {
         return $this;
     }
 
+
+
     /**
-     * Sets customer data
-     *
-     * @param string $name
-     * @param string $street
-     * @param string $city
-     * @param string $zip
-     * @param string $phone
-     * @param string $email
-     * @param string $company
-     * @param string $country
-     * @return $this
+     * Returns available shippers
+	 * @return array
      */
-    public function customer($name, $street, $city, $zip, $phone, $email, $company = null, $country = self::COUNTRY_CZECHIA) {
-        if (empty($name) || empty($street) || empty($city) || empty($zip) || empty($phone) || empty($email))
-            throw new \InvalidArgumentException('Invalid argument has been entered.');
-        if (!in_array($country, $this->getCountryCodes()))
-            throw new \InvalidArgumentException('Invalid country code has been entered.');
+    public function getShippers() {
+        $rc = new \ReflectionClass($this);
+        $constants = $rc->getConstants();
 
-        switch ($country) {
-            case self::COUNTRY_CZECHIA:
-                if (!preg_match('/^\d{5}$/', $zip))
-                    throw new \InvalidArgumentException('Invalid zip code has been entered. Match XXXXX pattern.');
-                break;
-
-            default:
-                throw new \UnexpectedValueException("Validation method is not implemented for $country country.");
+        foreach ($constants as $key => $item) {
+            if (substr($key, 0, 8) !== 'SHIPPER_') {
+                unset($constants[$key]);
+            }
         }
 
-        if (!preg_match('/^\+420\d{9}$/', $phone))
-            throw new \InvalidArgumentException('Invalid phone has been entered. Match +420YYYYYYYYY pattern.');
-
-        $this->data['data']['rec_name'] = $name;
-        $this->data['data']['rec_street'] = $street;
-        $this->data['data']['rec_city'] = $city;
-        $this->data['data']['rec_zip'] = $zip;
-        $this->data['data']['rec_phone'] = $phone;
-        $this->data['data']['rec_email'] = $email;
-        $this->data['data']['rec_country'] = $country;
-        if (isset($company))
-           $this->data['data']['rec_firm'] = $company;
-
-        $this->data['isCustomer'] = true;
-
-        return $this;
+        return $constants;
     }
 
-    /**
-     * Sets cash on delivery
-     *
-     * @param float $price
-     * @param string|int $variableSymbol
-     * @param string $currency
-     * @return $this
-     */
-    public function cashOnDelivery($price, $variableSymbol, $currency = self::CURRENCY_CZK) {
-        if (empty($price) || empty($variableSymbol))
-            throw new \InvalidArgumentException('Invalid argument has been entered.');
-        if (!is_numeric($price))
-            throw new \InvalidArgumentException('Invalid price has been entered.');
-        if (!is_numeric($variableSymbol))
-            throw new \InvalidArgumentException('Invalid variable symbol has been entered.');
-        if (!in_array($currency, $this->getCurrencies()))
-            throw new \InvalidArgumentException('Invalid currency has been entered.');
 
-        $this->data['data']['cod_price'] = (float)$price;
-        $this->data['data']['vs'] = $variableSymbol;
-        $this->data['data']['cod_currency'] = $currency;
-
-        $this->data['isCashOnDelivery'] = true;
-
-        return $this;
-    }
-
-    /**
-     * @return array(
-     *     'carrier_id' => track and trace package id,
-     *     'package_id' => identification used by API request
-     *     'label_url' => url to the label
-     * )
-     */
-    public function add() {
-        if (!$this->data['isService'] || !$this->data['isCustomer'])
-            throw new \UnexpectedValueException('Call service and customer method before.');
-
-        $orderId = isset($this->data['data'][self::OPTION_ORDER]) ? sprintf('%\'010s', $this->data['data'][self::OPTION_ORDER]) : '0000000000';
-        $this->data['data']['eid'] = $this->getEid(null, $orderId);
-        // add only one package
-        $response = $this->call(self::REQUEST_ADD, $this->data['shipper'], [$this->data['data']]);
-        $this->clean();
-
-        if (!isset($response[0]['package_id']))
-            throw new \InvalidArgumentException('Invalid arguments. Errors: ' . serialize($response[0]) . '.', self::EXCEPTION_INVALID_REQUEST);
-
-        return $response[0];
-    }
 
     /**
      * Returns available services for the given shipper
-     *
-     * @param string $shipper
+     * @param string
      * @return array
      */
-    public function getServices($shipper) {
+    public function getServices($shipper)
+	{
         if (empty($shipper) || !in_array($shipper, $this->getShippers()))
             throw new \InvalidArgumentException('Invalid argument has been entered.');
 
@@ -722,316 +651,63 @@ class Balikobot {
         return (!empty($response['service_types'])) ? $response['service_types'] : [];
     }
 
+
+
     /**
-     * Returns available manipulation units for the given shipper
-     *
-     * @param string $shipper
+     * @param string
+     * @param string
+     * @param array
+     * @param string
      * @return array
      */
-    public function getManipulationUnits($shipper) {
-        if (empty($shipper) || !in_array($shipper, $this->getShippers()))
+	protected function call($request, $shipper, array $data = [], $url = null)
+	{
+        if (empty($request) || empty ($shipper))
             throw new \InvalidArgumentException('Invalid argument has been entered.');
 
-        $response = $this->call(self::REQUEST_MANIPULATIONUNITS, $shipper);
-
-        if (isset($response['status']) && ($response['status'] == 409))
-            throw new \InvalidArgumentException("The $shipper shipper is not supported.", self::EXCEPTION_NOT_SUPPORTED);
-        if (!isset($response['status']) || ($response['status'] != 200)) {
-            $code = isset($response['status']) ? $response['status'] : 0;
-            throw new \UnexpectedValueException("Unexpected server response, code = $code.", self::EXCEPTION_SERVER_ERROR);
+        $r = curl_init();
+        curl_setopt($r, CURLOPT_URL, $url ? "$this->apiUrl/$shipper/$request/$url" : "$this->apiUrl/$shipper/$request");
+        curl_setopt($r, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($r, CURLOPT_HEADER, false);
+        if (!empty($data)) {
+            curl_setopt($r, CURLOPT_POST, true);
+            curl_setopt($r, CURLOPT_POSTFIELDS, json_encode($data));
         }
+        curl_setopt($r,CURLOPT_HTTPHEADER, [
+            'Authorization: Basic ' . base64_encode("$this->apiUser:$this->apiKey"),
+            'Content-Type: application/json',
+        ]);
+        $response = curl_exec($r);
+        curl_close($r);
 
-        if ($response['units'] === null)
-            return [];
-
-        $units = [];
-
-        foreach ($response['units'] as $item) {
-            $units[$item['code']] = $item['name'];
-        }
-
-        return $units;
+        return json_decode($response, true);
     }
+
+
 
     /**
-     * Returns available branches for the given shipper and its service
-     *
-     * @param string $shipper
-     * @param string $service
-     * @param bool $full Calls full branches instead branches request; currently available only for zasilkovna shipper
-     * @return array
+     * Cleans temporary data about created package
      */
-    public function getBranches($shipper, $service = null, $full = false) {
-        if (empty($shipper) || !in_array($shipper, $this->getShippers()))
-            throw new \InvalidArgumentException('Invalid argument has been entered.');
-
-        $response = $this->call($full ? self::REQUEST_FULLBRANCHES : self::REQUEST_BRANCHES, $shipper, [], $service);
-
-        if (isset($response['status']) && ($response['status'] == 409))
-            throw new \InvalidArgumentException("The $shipper shipper is not supported.", self::EXCEPTION_NOT_SUPPORTED);
-        if (!isset($response['status']) || ($response['status'] != 200)) {
-            $code = isset($response['status']) ? $response['status'] : 0;
-            throw new \UnexpectedValueException("Unexpected server response, code = $code.", self::EXCEPTION_SERVER_ERROR);
-        }
-
-        if ($response['branches'] === null)
-            return [];
-
-        $branches = [];
-        $id = 'id';
-
-        if ($shipper == self::SHIPPER_CP) {
-            $id = 'zip';
-        } elseif ($shipper == self::SHIPPER_INTIME) {
-            $id = 'name';
-        }
-
-        foreach ($response['branches'] as $item) {
-            $branches[$item[$id]] = $item;
-        }
-
-        return $branches;
+    protected function clean()
+	{
+        $this->data = [
+            'isService' => false,
+            'isCustomer' => false,
+            'isCashOnDelivery' => false,
+            'shipper' => null,
+            'data' => [],
+        ];
     }
 
-    /**
-     * Returns list of countries where service is available in
-     *
-     * @param string $shipper
-     * @return array
-     */
-    public function getCountriesForService($shipper) {
-        if (empty($shipper) || !in_array($shipper, $this->getShippers()))
-            throw new \InvalidArgumentException('Invalid argument has been entered.');
 
-        $response = $this->call(self::REQUEST_COUNTRIES4SERVICE, $shipper);
-
-        if (isset($response['status']) && ($response['status'] == 409))
-            throw new \InvalidArgumentException("The $shipper shipper is not supported.", self::EXCEPTION_NOT_SUPPORTED);
-        if (!isset($response['status']) || ($response['status'] != 200)) {
-            $code = isset($response['status']) ? $response['status'] : 0;
-            throw new \UnexpectedValueException("Unexpected server response, code = $code.", self::EXCEPTION_SERVER_ERROR);
-        }
-
-        if ($response['service_types'] === null)
-            return [];
-
-        $services = [];
-
-        foreach ($response['service_types'] as $item) {
-            $services[$item['service_type']] = $item['countries'];
-        }
-
-        return $services;
-    }
-
-    /**
-     * Returns available branches for the given shipper and its service
-     *
-     * @param string $shipper
-     * @param string $service
-     * @return array
-     */
-    public function getZipCodes($shipper, $service, $country = self::COUNTRY_CZECHIA) {
-        if (empty($shipper) || !in_array($shipper, $this->getShippers())
-            || empty($service) || !isset($this->getServices($shipper)[$service])
-            || !in_array($country, $this->getCountryCodes()))
-            throw new \InvalidArgumentException('Invalid argument has been entered.');
-
-        $response = $this->call(self::REQUEST_ZIPCODES, $shipper, [], "$service/$country");
-
-        if (isset($response['status']) && ($response['status'] == 409))
-            throw new \InvalidArgumentException("The $shipper shipper is not supported.", self::EXCEPTION_NOT_SUPPORTED);
-        if (!isset($response['status']) || ($response['status'] != 200)) {
-            $code = isset($response['status']) ? $response['status'] : 0;
-            throw new \UnexpectedValueException("Unexpected server response, code = $code.", self::EXCEPTION_SERVER_ERROR);
-        }
-
-        if ($response['zip_codes'] === null)
-            return [];
-
-        $zip = [];
-
-        // type item indicates if structure is zip or zip codes, but for some shippers response structure is wrong
-        // so we test if zip exist
-        if (isset($response['zip_codes'][0]['zip'])) {
-            foreach ($response['zip_codes'] as $item) {
-                $zip[] = $item['zip'];
-            }
-        } elseif (isset($response['zip_codes'][0]['zip_start']) && isset($response['zip_codes'][0]['zip_end'])) {
-            foreach ($response['zip_codes'] as $item) {
-                $zip[] = [$item['zip_start'], $item['zip_end']];
-            }
-        }
-
-        return $zip;
-    }
-
-    /**
-     * Drops a package from the front
-     * The package must not ordered
-     *
-     * @param string $shipper
-     * @param int $packageId
-     */
-    public function dropPackage($shipper, $packageId) {
-        if (empty($shipper) || !in_array($shipper, $this->getShippers()) || empty($packageId))
-            throw new \InvalidArgumentException('Invalid argument has been entered.');
-
-        $response = $this->call(self::REQUEST_DROP, $shipper, ['id' => $packageId]);
-
-        if (!isset($response['status']))
-            throw new \UnexpectedValueException('Unexpected server response.', self::EXCEPTION_SERVER_ERROR);
-        if ($response['status'] == 404)
-            throw new \UnexpectedValueException('The package does not exist or it was ordered.', self::EXCEPTION_INVALID_REQUEST);
-        if ($response['status'] != 200)
-            throw new \UnexpectedValueException("Unexpected server response, code={$response['status']}.", self::EXCEPTION_SERVER_ERROR);
-    }
-
-    /**
-     * Tracks a package
-     *
-     * @param string $shipper
-     * @param string $carrierId
-     * @return array
-     */
-    public function trackPackage($shipper, $carrierId) {
-        if (empty($shipper) || !in_array($shipper, $this->getShippers()) || empty($carrierId))
-            throw new \InvalidArgumentException('Invalid argument has been entered.');
-
-        $response = $this->call(self::REQUEST_TRACK, $shipper, ['id' => $carrierId]);
-
-        if (isset($response['status']) && ($response['status'] != 200))
-            throw new \UnexpectedValueException("Unexpected server response, code={$response['status']}.", self::EXCEPTION_SERVER_ERROR);
-        if (empty($response[0]))
-            throw new \UnexpectedValueException('Unexpected server response.', self::EXCEPTION_SERVER_ERROR);
-
-        return $response[0];
-    }
-
-    /**
-     * Tracks a package, get the last info
-     *
-     * @param string $shipper
-     * @param string $carrierId
-     * @return array
-     */
-    public function trackPackageLast($shipper, $carrierId) {
-        if (empty($shipper) || !in_array($shipper, $this->getShippers()) || empty($carrierId))
-            throw new \InvalidArgumentException('Invalid argument has been entered.');
-
-        $response = $this->call(self::REQUEST_TRACKSTATUS, $shipper, ['id' => $carrierId]);
-
-        if (isset($response['status']) && ($response['status'] != 200))
-            throw new \UnexpectedValueException("Unexpected server response, code={$response['status']}.", self::EXCEPTION_SERVER_ERROR);
-        if (empty($response[0]))
-            throw new \UnexpectedValueException('Unexpected server response.', self::EXCEPTION_SERVER_ERROR);
-
-        return $response[0];
-    }
-
-    /**
-     * Checks if there are packages in the front (not ordered)
-     *
-     * @param string $shipper
-     */
-    public function overview($shipper) {
-        if (empty($shipper) || !in_array($shipper, $this->getShippers()))
-            throw new \InvalidArgumentException('Invalid argument has been entered.');
-
-        $response = $this->call(self::REQUEST_OVERVIEW, $shipper);
-
-        if (isset($response['status']) && ($response['status'] == 404))
-            throw new \UnexpectedValueException('No packages.', self::EXCEPTION_INVALID_REQUEST);
-
-        return $response;
-    }
-
-    /**
-     * Gets labels
-     *
-     * @param string $shipper
-     * @param array $packages
-     * @return string
-     */
-    public function getLabels($shipper, array $packages) {
-        if (empty($shipper) || !in_array($shipper, $this->getShippers()) || empty($packages))
-            throw new \InvalidArgumentException('Invalid argument has been entered.');
-
-        $response = $this->call(self::REQUEST_LABELS, $shipper, ['package_ids' => $packages]);
-
-        if (isset($response['status']) && ($response['status'] != 200))
-            throw new \UnexpectedValueException('Invalid data or invalid packages number.', self::EXCEPTION_INVALID_REQUEST);
-
-        return $response['labels_url'];
-    }
-
-    /**
-     * Gets complete information about a package
-     *
-     * @param string $shipper
-     * @param int $packageId
-     * @return array
-     */
-    public function getPackageInfo($shipper, $packageId) {
-        if (empty($shipper) || !in_array($shipper, $this->getShippers()) || empty($packageId))
-            throw new \InvalidArgumentException('Invalid argument has been entered.');
-
-        $response = $this->call(self::REQUEST_PACKAGE, $shipper, null, $packageId);
-
-        if (isset($response['status']) && ($response['status'] == 404))
-            throw new \UnexpectedValueException('Invalid package number.', self::EXCEPTION_INVALID_REQUEST);
-
-        return $response;
-    }
-
-    /**
-     * Order packages' collection
-     *
-     * @param string $shipper
-     * @param array $packages
-     * @return array
-     */
-    public function order($shipper, array $packages = []) {
-        if (empty($shipper) || !in_array($shipper, $this->getShippers()))
-            throw new \InvalidArgumentException('Invalid argument has been entered.');
-
-        $response = $this->call(self::REQUEST_ORDER, $shipper, empty($packages) ? [] : ['package_ids' => $packages]);
-
-        if (!isset($response['status']))
-            throw new \UnexpectedValueException('Unexpected server response.', self::EXCEPTION_SERVER_ERROR);
-        if ($response['status'] == 406)
-            throw new \UnexpectedValueException('Invalid package numbers.', self::EXCEPTION_INVALID_REQUEST);
-        if ($response['status'] != 200)
-            throw new \UnexpectedValueException("Unexpected server response, code={$response['status']}.", self::EXCEPTION_SERVER_ERROR);
-
-        return $response;
-    }
-
-    // helpers ---------------------------------------------------------------------------------------------------------
-
-    /**
-     * Returns available shippers
-     */
-    public function getShippers() {
-        $rc = new \ReflectionClass($this);
-        $constants = $rc->getConstants();
-
-        foreach ($constants as $key => $item) {
-            if (substr($key, 0, 8) !== 'SHIPPER_') {
-                unset($constants[$key]);
-            }
-        }
-
-        return $constants;
-    }
 
     /**
      * Returns available options for the given shipper
-     *
-     * @param string $shipper
+     * @param string
      * @return array
      */
-    public function getOptions($shipper) {
+    public function getOptions($shipper)
+	{
         if (empty($shipper) || !in_array($shipper, $this->getShippers()))
             throw new \InvalidArgumentException('Invalid argument has been entered.');
 
@@ -1139,61 +815,15 @@ class Balikobot {
         return [];
     }
 
-    /**
-     * Returns country codes
-     */
-    public function getCountryCodes() {
-        $rc = new \ReflectionClass($this);
-        $constants = $rc->getConstants();
 
-        foreach ($constants as $key => $item) {
-            if (substr($key, 0, 8) !== 'COUNTRY_') {
-                unset($constants[$key]);
-            }
-        }
-
-        return $constants;
-    }
 
     /**
-     * Returns currencies
+     * @param string
+     * @param mixed
+	 * @param string
      */
-    public function getCurrencies() {
-        $rc = new \ReflectionClass($this);
-        $constants = $rc->getConstants();
-
-        foreach ($constants as $key => $item) {
-            if (substr($key, 0, 9) !== 'CURRENCY_') {
-                unset($constants[$key]);
-            }
-        }
-
-        return $constants;
-    }
-
-    /**
-     * Returns available values for option services
-     */
-    public function getOptionServices() {
-        $rc = new \ReflectionClass($this);
-        $constants = $rc->getConstants();
-
-        foreach ($constants as $key => $item) {
-            if (substr($key, 0, 16) !== 'OPTION_SERVICES_') {
-                unset($constants[$key]);
-            }
-        }
-
-        return $constants;
-    }
-
-    // private ---------------------------------------------------------------------------------------------------------
-
-    /**
-     * @param string $name
-     * @param mixed $value
-     */
-    private function saveOption($name, $value, $shipper = null) {
+	protected function saveOption($name, $value, $shipper = null)
+	{
         if (empty($name))
             throw new \InvalidArgumentException('Invalid argument has been entered.');
 
@@ -1285,12 +915,176 @@ class Balikobot {
         $this->data['data'][$name] = $value;
     }
 
+
+
     /**
-     * @param string $shipper
-     * @param string $orderId
+     * Returns available values for option services
+     */
+    public function getOptionServices()
+	{
+        $rc = new \ReflectionClass($this);
+        $constants = $rc->getConstants();
+
+        foreach ($constants as $key => $item) {
+            if (substr($key, 0, 16) !== 'OPTION_SERVICES_') {
+                unset($constants[$key]);
+            }
+        }
+
+        return $constants;
+    }
+
+
+
+    /**
+     * Sets customer data
+     * @param string
+     * @param string
+     * @param string
+     * @param string
+     * @param string
+     * @param string
+     * @param string
+     * @param string
+     * @return self
+     */
+    public function customer($name, $street, $city, $zip, $phone, $email, $company = null, $country = self::COUNTRY_CZECHIA)
+	{
+        if (empty($name) || empty($street) || empty($city) || empty($zip) || empty($phone) || empty($email))
+            throw new \InvalidArgumentException('Invalid argument has been entered.');
+        if (!in_array($country, $this->getCountryCodes()))
+            throw new \InvalidArgumentException('Invalid country code has been entered.');
+
+        switch ($country) {
+            case self::COUNTRY_CZECHIA:
+                if (!preg_match('/^\d{5}$/', $zip))
+                    throw new \InvalidArgumentException('Invalid zip code has been entered. Match XXXXX pattern.');
+                break;
+
+            default:
+                throw new \UnexpectedValueException("Validation method is not implemented for $country country.");
+        }
+
+        if (!preg_match('/^\+420\d{9}$/', $phone))
+            throw new \InvalidArgumentException('Invalid phone has been entered. Match +420YYYYYYYYY pattern.');
+
+        $this->data['data']['rec_name'] = $name;
+        $this->data['data']['rec_street'] = $street;
+        $this->data['data']['rec_city'] = $city;
+        $this->data['data']['rec_zip'] = $zip;
+        $this->data['data']['rec_phone'] = $phone;
+        $this->data['data']['rec_email'] = $email;
+        $this->data['data']['rec_country'] = $country;
+        if (isset($company))
+           $this->data['data']['rec_firm'] = $company;
+
+        $this->data['isCustomer'] = true;
+
+        return $this;
+    }
+
+
+
+    /**
+     * Returns country codes
+     */
+    public function getCountryCodes()
+	{
+        $rc = new \ReflectionClass($this);
+        $constants = $rc->getConstants();
+
+        foreach ($constants as $key => $item) {
+            if (substr($key, 0, 8) !== 'COUNTRY_') {
+                unset($constants[$key]);
+            }
+        }
+
+        return $constants;
+    }
+
+
+
+    /**
+     * Sets cash on delivery
+     * @param float
+     * @param string|int
+     * @param string
+     * @return self
+     */
+    public function cashOnDelivery($price, $variableSymbol, $currency = self::CURRENCY_EUR)
+	{
+        if (empty($price) || empty($variableSymbol))
+            throw new \InvalidArgumentException('Invalid argument has been entered.');
+        if (!is_numeric($price))
+            throw new \InvalidArgumentException('Invalid price has been entered.');
+        if (!is_numeric($variableSymbol))
+            throw new \InvalidArgumentException('Invalid variable symbol has been entered.');
+        if (!in_array($currency, $this->getCurrencies()))
+            throw new \InvalidArgumentException('Invalid currency has been entered.');
+
+        $this->data['data']['cod_price'] = (float)$price;
+        $this->data['data']['vs'] = $variableSymbol;
+        $this->data['data']['cod_currency'] = $currency;
+
+        $this->data['isCashOnDelivery'] = true;
+
+        return $this;
+    }
+
+
+
+    /**
+     * Returns currencies
+     */
+    public function getCurrencies()
+	{
+        $rc = new \ReflectionClass($this);
+        $constants = $rc->getConstants();
+
+        foreach ($constants as $key => $item) {
+            if (substr($key, 0, 9) !== 'CURRENCY_') {
+                unset($constants[$key]);
+            }
+        }
+
+        return $constants;
+    }
+
+
+
+    /**
+     * @return array(
+     *     'carrier_id' => track and trace package id,
+     *     'package_id' => identification used by API request
+     *     'label_url' => url to the label
+     * )
+     */
+    public function add()
+	{
+        if (!$this->data['isService'] || !$this->data['isCustomer'])
+            throw new \UnexpectedValueException('Call service and customer method before.');
+
+        $orderId = isset($this->data['data'][self::OPTION_ORDER]) ? sprintf('%\'010s', $this->data['data'][self::OPTION_ORDER]) : '0000000000';
+        $this->data['data']['eid'] = $this->getEid(null, $orderId);
+        // add only one package
+        $response = $this->call(self::REQUEST_ADD, $this->data['shipper'], [$this->data['data']]);
+        $this->clean();
+
+        if (!isset($response[0]['package_id']))
+            throw new \InvalidArgumentException('Invalid arguments. Errors: ' . serialize($response[0]) . '.', self::EXCEPTION_INVALID_REQUEST);
+
+        return $response[0];
+    }
+
+
+
+    /**
+     * @param string
+     * @param string
      * @return string
      */
-    private function getEid($shipper = null, $orderId = null) {
+	protected function getEid($shipper = null, $orderId = null)
+	{
         $time = time();
         $delimeter = '';
 
@@ -1305,46 +1099,313 @@ class Balikobot {
         }
     }
 
+
+
     /**
-     * @param string $request
-     * @param string $shipper
-     * @param array $data
-     * @param string $url
+     * Returns available manipulation units for the given shipper
+     * @param string
      * @return array
      */
-    private function call($request, $shipper, array $data = [], $url = null) {
-        if (empty($request) || empty ($shipper))
+    public function getManipulationUnits($shipper)
+	{
+        if (empty($shipper) || !in_array($shipper, $this->getShippers()))
             throw new \InvalidArgumentException('Invalid argument has been entered.');
 
-        $r = curl_init();
-        curl_setopt($r, CURLOPT_URL, $url ? "$this->apiUrl/$shipper/$request/$url" : "$this->apiUrl/$shipper/$request");
-        curl_setopt($r, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($r, CURLOPT_HEADER, false);
-        if (!empty($data)) {
-            curl_setopt($r, CURLOPT_POST, true);
-            curl_setopt($r, CURLOPT_POSTFIELDS, json_encode($data));
-        }
-        curl_setopt($r,CURLOPT_HTTPHEADER, [
-            'Authorization: Basic ' . base64_encode("$this->apiUser:$this->apiKey"),
-            'Content-Type: application/json',
-        ]);
-        $response = curl_exec($r);
-        curl_close($r);
+        $response = $this->call(self::REQUEST_MANIPULATIONUNITS, $shipper);
 
-        return json_decode($response, true);
+        if (isset($response['status']) && ($response['status'] == 409))
+            throw new \InvalidArgumentException("The $shipper shipper is not supported.", self::EXCEPTION_NOT_SUPPORTED);
+        if (!isset($response['status']) || ($response['status'] != 200)) {
+            $code = isset($response['status']) ? $response['status'] : 0;
+            throw new \UnexpectedValueException("Unexpected server response, code = $code.", self::EXCEPTION_SERVER_ERROR);
+        }
+
+        if ($response['units'] === null)
+            return [];
+
+        $units = [];
+
+        foreach ($response['units'] as $item) {
+            $units[$item['code']] = $item['name'];
+        }
+
+        return $units;
     }
+
+
 
     /**
-     * Cleans temporary data about created package
+     * Returns available branches for the given shipper and its service
+     * @param string
+     * @param string
+     * @param bool Calls full branches instead branches request; currently available only for zasilkovna shipper
+     * @return array
      */
-    private function clean() {
-        $this->data = [
-            'isService' => false,
-            'isCustomer' => false,
-            'isCashOnDelivery' => false,
-            'shipper' => null,
-            'data' => [],
-        ];
+    public function getBranches($shipper, $service = null, $full = false)
+	{
+        if (empty($shipper) || !in_array($shipper, $this->getShippers()))
+            throw new \InvalidArgumentException('Invalid argument has been entered.');
+
+        $response = $this->call($full ? self::REQUEST_FULLBRANCHES : self::REQUEST_BRANCHES, $shipper, [], $service);
+
+        if (isset($response['status']) && ($response['status'] == 409))
+            throw new \InvalidArgumentException("The $shipper shipper is not supported.", self::EXCEPTION_NOT_SUPPORTED);
+        if (!isset($response['status']) || ($response['status'] != 200)) {
+            $code = isset($response['status']) ? $response['status'] : 0;
+            throw new \UnexpectedValueException("Unexpected server response, code = $code.", self::EXCEPTION_SERVER_ERROR);
+        }
+
+        if ($response['branches'] === null)
+            return [];
+
+        $branches = [];
+        $id = 'id';
+
+        if ($shipper == self::SHIPPER_CP) {
+            $id = 'zip';
+        } elseif ($shipper == self::SHIPPER_INTIME) {
+            $id = 'name';
+        }
+
+        foreach ($response['branches'] as $item) {
+            $branches[$item[$id]] = $item;
+        }
+
+        return $branches;
     }
 
+
+
+    /**
+     * Returns list of countries where service is available in
+     * @param string
+     * @return array
+     */
+    public function getCountriesForService($shipper)
+	{
+        if (empty($shipper) || !in_array($shipper, $this->getShippers()))
+            throw new \InvalidArgumentException('Invalid argument has been entered.');
+
+        $response = $this->call(self::REQUEST_COUNTRIES4SERVICE, $shipper);
+
+        if (isset($response['status']) && ($response['status'] == 409))
+            throw new \InvalidArgumentException("The $shipper shipper is not supported.", self::EXCEPTION_NOT_SUPPORTED);
+        if (!isset($response['status']) || ($response['status'] != 200)) {
+            $code = isset($response['status']) ? $response['status'] : 0;
+            throw new \UnexpectedValueException("Unexpected server response, code = $code.", self::EXCEPTION_SERVER_ERROR);
+        }
+
+        if ($response['service_types'] === null)
+            return [];
+
+        $services = [];
+
+        foreach ($response['service_types'] as $item) {
+            $services[$item['service_type']] = $item['countries'];
+        }
+
+        return $services;
+    }
+
+
+
+    /**
+     * Returns available branches for the given shipper and its service
+     * @param string
+     * @param string
+	 * @param string
+     * @return array
+     */
+    public function getZipCodes($shipper, $service, $country = self::COUNTRY_CZECHIA)
+	{
+        if (empty($shipper) || !in_array($shipper, $this->getShippers())
+            || empty($service) || !isset($this->getServices($shipper)[$service])
+            || !in_array($country, $this->getCountryCodes()))
+            throw new \InvalidArgumentException('Invalid argument has been entered.');
+
+        $response = $this->call(self::REQUEST_ZIPCODES, $shipper, [], "$service/$country");
+
+        if (isset($response['status']) && ($response['status'] == 409))
+            throw new \InvalidArgumentException("The $shipper shipper is not supported.", self::EXCEPTION_NOT_SUPPORTED);
+        if (!isset($response['status']) || ($response['status'] != 200)) {
+            $code = isset($response['status']) ? $response['status'] : 0;
+            throw new \UnexpectedValueException("Unexpected server response, code = $code.", self::EXCEPTION_SERVER_ERROR);
+        }
+
+        if ($response['zip_codes'] === null)
+            return [];
+
+        $zip = [];
+
+        // type item indicates if structure is zip or zip codes, but for some shippers response structure is wrong
+        // so we test if zip exist
+        if (isset($response['zip_codes'][0]['zip'])) {
+            foreach ($response['zip_codes'] as $item) {
+                $zip[] = $item['zip'];
+            }
+        } elseif (isset($response['zip_codes'][0]['zip_start']) && isset($response['zip_codes'][0]['zip_end'])) {
+            foreach ($response['zip_codes'] as $item) {
+                $zip[] = [$item['zip_start'], $item['zip_end']];
+            }
+        }
+
+        return $zip;
+    }
+
+
+
+    /**
+     * Drops a package from the front
+     * The package must not ordered
+     * @param string
+     * @param int
+     */
+    public function dropPackage($shipper, $packageId)
+	{
+        if (empty($shipper) || !in_array($shipper, $this->getShippers()) || empty($packageId))
+            throw new \InvalidArgumentException('Invalid argument has been entered.');
+
+        $response = $this->call(self::REQUEST_DROP, $shipper, ['id' => $packageId]);
+
+        if (!isset($response['status']))
+            throw new \UnexpectedValueException('Unexpected server response.', self::EXCEPTION_SERVER_ERROR);
+        if ($response['status'] == 404)
+            throw new \UnexpectedValueException('The package does not exist or it was ordered.', self::EXCEPTION_INVALID_REQUEST);
+        if ($response['status'] != 200)
+            throw new \UnexpectedValueException("Unexpected server response, code={$response['status']}.", self::EXCEPTION_SERVER_ERROR);
+    }
+
+
+
+    /**
+     * Tracks a package
+     * @param string $shipper
+     * @param string $carrierId
+     * @return array
+     */
+    public function trackPackage($shipper, $carrierId)
+	{
+        if (empty($shipper) || !in_array($shipper, $this->getShippers()) || empty($carrierId))
+            throw new \InvalidArgumentException('Invalid argument has been entered.');
+
+        $response = $this->call(self::REQUEST_TRACK, $shipper, ['id' => $carrierId]);
+
+        if (isset($response['status']) && ($response['status'] != 200))
+            throw new \UnexpectedValueException("Unexpected server response, code={$response['status']}.", self::EXCEPTION_SERVER_ERROR);
+        if (empty($response[0]))
+            throw new \UnexpectedValueException('Unexpected server response.', self::EXCEPTION_SERVER_ERROR);
+
+        return $response[0];
+    }
+
+
+
+    /**
+     * Tracks a package, get the last info
+     * @param string
+     * @param string
+     * @return array
+     */
+    public function trackPackageLast($shipper, $carrierId)
+	{
+        if (empty($shipper) || !in_array($shipper, $this->getShippers()) || empty($carrierId))
+            throw new \InvalidArgumentException('Invalid argument has been entered.');
+
+        $response = $this->call(self::REQUEST_TRACKSTATUS, $shipper, ['id' => $carrierId]);
+
+        if (isset($response['status']) && ($response['status'] != 200))
+            throw new \UnexpectedValueException("Unexpected server response, code={$response['status']}.", self::EXCEPTION_SERVER_ERROR);
+        if (empty($response[0]))
+            throw new \UnexpectedValueException('Unexpected server response.', self::EXCEPTION_SERVER_ERROR);
+
+        return $response[0];
+    }
+
+
+
+    /**
+     * Checks if there are packages in the front (not ordered)
+     * @param string
+	 * @return string
+     */
+    public function overview($shipper)
+	{
+        if (empty($shipper) || !in_array($shipper, $this->getShippers()))
+            throw new \InvalidArgumentException('Invalid argument has been entered.');
+
+        $response = $this->call(self::REQUEST_OVERVIEW, $shipper);
+
+        if (isset($response['status']) && ($response['status'] == 404))
+            throw new \UnexpectedValueException('No packages.', self::EXCEPTION_INVALID_REQUEST);
+
+        return $response;
+    }
+
+
+
+    /**
+     * Gets labels
+     * @param string
+     * @param array
+     * @return string
+     */
+    public function getLabels($shipper, array $packages)
+	{
+        if (empty($shipper) || !in_array($shipper, $this->getShippers()) || empty($packages))
+            throw new \InvalidArgumentException('Invalid argument has been entered.');
+
+        $response = $this->call(self::REQUEST_LABELS, $shipper, ['package_ids' => $packages]);
+
+        if (isset($response['status']) && ($response['status'] != 200))
+            throw new \UnexpectedValueException('Invalid data or invalid packages number.', self::EXCEPTION_INVALID_REQUEST);
+
+        return $response['labels_url'];
+    }
+
+
+
+    /**
+     * Gets complete information about a package
+     * @param string
+     * @param int
+     * @return array
+     */
+    public function getPackageInfo($shipper, $packageId)
+	{
+        if (empty($shipper) || !in_array($shipper, $this->getShippers()) || empty($packageId))
+            throw new \InvalidArgumentException('Invalid argument has been entered.');
+
+        $response = $this->call(self::REQUEST_PACKAGE, $shipper, null, $packageId);
+
+        if (isset($response['status']) && ($response['status'] == 404))
+            throw new \UnexpectedValueException('Invalid package number.', self::EXCEPTION_INVALID_REQUEST);
+
+        return $response;
+    }
+
+
+
+    /**
+     * Order packages' collection
+     *
+     * @param string
+     * @param array
+     * @return array
+     */
+    public function order($shipper, array $packages = [])
+	{
+        if (empty($shipper) || !in_array($shipper, $this->getShippers()))
+            throw new \InvalidArgumentException('Invalid argument has been entered.');
+
+        $response = $this->call(self::REQUEST_ORDER, $shipper, empty($packages) ? [] : ['package_ids' => $packages]);
+
+        if (!isset($response['status']))
+            throw new \UnexpectedValueException('Unexpected server response.', self::EXCEPTION_SERVER_ERROR);
+        if ($response['status'] == 406)
+            throw new \UnexpectedValueException('Invalid package numbers.', self::EXCEPTION_INVALID_REQUEST);
+        if ($response['status'] != 200)
+            throw new \UnexpectedValueException("Unexpected server response, code={$response['status']}.", self::EXCEPTION_SERVER_ERROR);
+
+        return $response;
+    }
 }
